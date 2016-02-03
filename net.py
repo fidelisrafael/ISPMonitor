@@ -4,9 +4,21 @@ import os
 import re
 import tweepy
 import config
+import re as regexp
 from random import randint
 from IPython import embed # call embed() anywhere to debug code
 
+## Ping:19.251msDownload:       28.81 Mbit/s Upload   :  3.04 Mbit/s
+## Ping:19.251msDownload:28.81Mbit/sUpload:3.04Mbit/s
+## Ping:19.251ms\nDownload:28.81Mbit/s\nUpload:3.04Mbit/s
+## Ping:19.251\nDownload:28.81\nUpload:3.04
+## Ping:19.251Download:28.81Upload:3.04
+## Ping:19.251 Download:28.81 Mbit/s Upload:3.04
+## Ping:19.251Download:28.81Upload:3.04
+## Ping:19.0\nDownload  :28.81  Mbit/sUpload:3.04
+## Ping: 19.0\nDownload: 28.81\nUpload: 3.04
+
+LOG_PATTERN = '\s*(Ping)\s*:\s*(\d+.\d+)\s*(ms)?\n?\s*(Download)\s*:\s*(\d+.\d+)\s*(Mbit\/s)?\s*\n?\s*(Upload)\s*:\s*(\d+.\d+)\s*(Mbit\/s)?\s*\n?'
 
 def main():
   try:
@@ -28,14 +40,23 @@ def post_results_in_twitter(results):
     print "Message: %s" % (status_message)
 
 def run_test():
+  print 'collecting internet speed data(this can take a while depending on your connection speed)\n'
   os.system('speedtest-cli --simple > net.log')
 
 def parse_results():
-  log        = open('net.log')
+  log = open('net.log')
+  log_data = log.read()
 
-  ping       = get_value(log.readline())
-  down_speed = get_value(log.readline())
-  up_speed   = get_value(log.readline())
+  ping, down_speed, up_speed = None, None, None
+
+  try:
+    # make sure that system can read speedtest-cli output in different formats
+    matches = regexp.findall(regexp.compile(LOG_PATTERN), log_data)[0]
+
+    ping, down_speed, up_speed = map(float, [matches[1], matches[4], matches[7]])
+  except:
+      print '[Critical] Error parsing .net log file. Check if file content is valid and match LOG_PATTERN'
+      exit()
 
   return [
     ping,
@@ -44,9 +65,6 @@ def parse_results():
     up_speed,
     (up_speed * 100 / config.up_speed)
   ]
-
-def get_value(line):
-  return float(re.search('(\d+\.\d+)', line).group(0))
 
 def authenticate():
   auth = tweepy.OAuthHandler(config.twitter_consumer_key, config.twitter_consumer_secret)
